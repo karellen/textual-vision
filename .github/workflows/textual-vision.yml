@@ -1,0 +1,53 @@
+name: textual-vision
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        python-version:
+          - '3.14'
+          - '3.13'
+          - '3.12'
+          - '3.11'
+          - '3.10'
+    env:
+      DEPLOY_PYTHONS: "3.14"
+      DEPLOY_OSES: "Linux"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TWINE_USERNAME: __token__
+      TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+    steps:
+      - name: Build with PyBuilder
+        uses: pybuilder/build@master
+        with:
+          homebrew-python: true
+          python-version: ${{ matrix.python-version }}
+          is-upload: >-
+            ${{ github.event_name == 'push'
+            && contains(env.DEPLOY_OSES, runner.os)
+            && contains(env.DEPLOY_PYTHONS, matrix.python-version) }}
+
+          release-app-id: ${{ secrets.PYBUILDER_RELEASE_APP_ID }}
+          release-app-private-key: ${{ secrets.PYBUILDER_RELEASE_APP_PRIVATE_KEY }}
+  build-summary:
+    if: success() || failure()
+    runs-on: ubuntu-latest
+    name: Build Stable Summary
+    needs: build
+    steps:
+      - name: Check build matrix status
+        if: needs.build.result != 'success'
+        run: exit 1
