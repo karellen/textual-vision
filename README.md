@@ -2,6 +2,16 @@
 
 A Python implementation of [Turbo Vision](https://github.com/magiblot/tvision) built on top of [Textual](https://github.com/Textualize/textual).
 
+[![Gitter](https://img.shields.io/gitter/room/karellen/lobby?logo=gitter)](https://gitter.im/karellen/Lobby)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/karellen/textual-vision/textual-vision.yml?branch=master)](https://github.com/karellen/textual-vision/actions/workflows/textual-vision.yml)
+[![Coverage Status](https://img.shields.io/coveralls/github/karellen/textual-vision/master?logo=coveralls)](https://coveralls.io/r/karellen/textual-vision?branch=master)
+
+[![Textual Vision Version](https://img.shields.io/pypi/v/textual-vision?logo=pypi)](https://pypi.org/project/textual-vision/)
+[![Textual Vision Python Versions](https://img.shields.io/pypi/pyversions/textual-vision?logo=pypi)](https://pypi.org/project/textual-vision/)
+[![Textual Vision Downloads Per Day](https://img.shields.io/pypi/dd/textual-vision?logo=pypi)](https://pypi.org/project/textual-vision/)
+[![Textual Vision Downloads Per Week](https://img.shields.io/pypi/dw/textual-vision?logo=pypi)](https://pypi.org/project/textual-vision/)
+[![Textual Vision Downloads Per Month](https://img.shields.io/pypi/dm/textual-vision?logo=pypi)](https://pypi.org/project/textual-vision/)
+
 Textual Vision brings the classic Turbo Vision desktop application architecture to modern Python terminals: movable/resizable windows with Z-order, modal dialogs, hierarchical dropdown menus, a context-sensitive status bar, three-phase event dispatch, and the full set of TV form controls. It uses Textual as its rendering and terminal I/O layer while faithfully porting TV's class hierarchy, event model, and visual style.
 
 ## Features
