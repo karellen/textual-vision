@@ -39,12 +39,15 @@ from textual.widgets import Static
 from textual_vision.app import Application
 from textual_vision.button import Button
 from textual_vision.cluster import CheckBoxes, RadioButtons
+from textual_vision.combo_box import ComboBox
 from textual_vision.constants import Command, OptionFlag
 from textual_vision.dialogs import Dialog
 from textual_vision.events import CommandMessage
 from textual_vision.input_line import InputLine
 from textual_vision.label import Label
+from textual_vision.list_box import ListBox
 from textual_vision.menus import Menu, MenuItem, Separator, SubMenu
+from textual_vision.scroll_bar import ScrollBar
 from textual_vision.status_line import StatusDef, StatusItem
 from textual_vision.window import Window
 
@@ -66,6 +69,143 @@ class DemoWindow(Window):
         super().on_mount()
         content = self.query_one(".tv-window-content")
         content.mount(self._body)
+
+
+class ScrollBarWindow(Window):
+    """A window demonstrating vertical and horizontal scroll bars.
+
+    Scrollbars overlay the frame borders, matching TV's convention where
+    the right border becomes the vertical scrollbar and the bottom border
+    becomes the horizontal scrollbar.
+    """
+
+    TOTAL_LINES = 50
+    TOTAL_COLS = 120
+
+    DEFAULT_CSS = """
+    ScrollBarWindow .scroll-viewport {
+        width: 1fr;
+        height: 1fr;
+        overflow: hidden;
+    }
+    ScrollBarWindow .vscrollbar {
+        width: 1;
+        dock: right;
+        margin: 1 0 0 0;
+        layer: content;
+    }
+    ScrollBarWindow .hscrollbar {
+        height: 1;
+        dock: bottom;
+        margin: 0 1 0 0;
+        layer: content;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._lines = [f"Line {i:3d}: {'·' * 100} end" for i in range(1, self.TOTAL_LINES + 1)]
+        self._scroll_y = 0
+        self._scroll_x = 0
+        self._viewport: Static | None = None
+        self._vbar: ScrollBar | None = None
+        self._hbar: ScrollBar | None = None
+
+    def on_mount(self):
+        super().on_mount()
+        content = self.query_one(".tv-window-content")
+
+        self._viewport = Static("", classes="scroll-viewport")
+        content.mount(self._viewport)
+
+        self._vbar = ScrollBar(min_val=0, max_val=self.TOTAL_LINES - 1,
+                               page_step=10, arrow_step=1,
+                               horizontal=False, corner_char="┘",
+                               classes="vscrollbar")
+        self._hbar = ScrollBar(min_val=0, max_val=self.TOTAL_COLS - 1,
+                               page_step=20, arrow_step=1,
+                               horizontal=True,
+                               left_chars="└─", corner_char="─",
+                               classes="hscrollbar")
+        self.mount(self._vbar)
+        self.mount(self._hbar)
+        self._update_viewport()
+
+    def _update_viewport(self):
+        if not self._viewport:
+            return
+        visible_h = max(1, self._viewport.size.height or 15)
+        visible_w = max(1, self._viewport.size.width or 40)
+        start = self._scroll_y
+        visible = self._lines[start:start + visible_h]
+        clipped = [line[self._scroll_x:self._scroll_x + visible_w] for line in visible]
+        self._viewport.update("\n".join(clipped))
+
+    def on_scroll_bar_changed(self, message: ScrollBar.Changed):
+        if self._vbar:
+            self._scroll_y = self._vbar.value
+        if self._hbar:
+            self._scroll_x = self._hbar.value
+        self._update_viewport()
+        message.stop()
+
+    def on_resize(self, event):
+        self._update_viewport()
+
+
+CMD_SCROLLBAR_DEMO = Command.USER
+CMD_LISTBOX_DEMO = Command.USER + 1
+CMD_THEME_TP = Command.USER + 10
+CMD_THEME_TC = Command.USER + 11
+CMD_THEME_TC_1X = Command.USER + 12
+CMD_THEME_TC_TURQUOISE = Command.USER + 13
+
+
+class ListBoxWindow(Window):
+    """A window demonstrating a ListBox with a vertical scrollbar."""
+
+    DEFAULT_CSS = """
+    ListBoxWindow .list-area {
+        width: 1fr;
+        height: 1fr;
+    }
+    ListBoxWindow .vscrollbar {
+        width: 1;
+        dock: right;
+        margin: 1 0 0 0;
+        layer: content;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._listbox: ListBox | None = None
+        self._vbar: ScrollBar | None = None
+
+    def on_mount(self):
+        super().on_mount()
+        content = self.query_one(".tv-window-content")
+
+        items = [f"Item {i:3d} — Sample list entry" for i in range(1, 101)]
+
+        self._vbar = ScrollBar(min_val=0, max_val=len(items) - 1,
+                               page_step=10, arrow_step=1,
+                               horizontal=False, corner_char="┘",
+                               classes="vscrollbar")
+        self._listbox = ListBox(items=items, v_scroll_bar=self._vbar,
+                                classes="list-area")
+
+        content.mount(self._listbox)
+        self.mount(self._vbar)
+
+    def on_scroll_bar_changed(self, message: ScrollBar.Changed):
+        message.stop()
+
+    def on_list_viewer_item_selected(self, message):
+        if self._listbox is not None:
+            selected_text = self._listbox.get_text(message.index)
+            self.title = f"List Box Demo — {selected_text}"
+        message.stop()
 
 
 class DemoApp(Application):
@@ -110,9 +250,19 @@ class DemoApp(Application):
             ),
             SubMenu(
                 "~W~indow",
+                MenuItem("~S~croll bar demo", CMD_SCROLLBAR_DEMO),
+                MenuItem("~L~ist box demo", CMD_LISTBOX_DEMO),
+                Separator(),
                 MenuItem("~T~ile", Command.TILE),
                 MenuItem("C~a~scade", Command.CASCADE),
                 MenuItem("Close ~a~ll", Command.CLOSE_ALL),
+            ),
+            SubMenu(
+                "~S~ettings",
+                MenuItem("Turbo ~P~ascal", CMD_THEME_TP),
+                MenuItem("Turbo ~C~", CMD_THEME_TC),
+                MenuItem("Turbo C ~1~.x", CMD_THEME_TC_1X),
+                MenuItem("Turbo C T~u~rquoise", CMD_THEME_TC_TURQUOISE),
             ),
             SubMenu(
                 "~H~elp",
@@ -144,6 +294,24 @@ class DemoApp(Application):
             if self.desktop:
                 self.desktop.cascade()
             message.stop()
+        elif message.command == CMD_SCROLLBAR_DEMO:
+            self._show_scrollbar_demo()
+            message.stop()
+        elif message.command == CMD_LISTBOX_DEMO:
+            self._show_listbox_demo()
+            message.stop()
+        elif message.command == CMD_THEME_TP:
+            self.theme = "turbo-pascal"
+            message.stop()
+        elif message.command == CMD_THEME_TC:
+            self.theme = "turbo-c"
+            message.stop()
+        elif message.command == CMD_THEME_TC_1X:
+            self.theme = "turbo-c-1x"
+            message.stop()
+        elif message.command == CMD_THEME_TC_TURQUOISE:
+            self.theme = "turbo-c-turquoise"
+            message.stop()
         elif message.command == Command.CLOSE_ALL:
             self._close_all_windows()
             message.stop()
@@ -170,6 +338,24 @@ class DemoApp(Application):
         cy = max(0, (self.size.height - self.size.height * 70 // 100) // 2)
         dlg.styles.offset = (cx, cy)
         self.insert_window(dlg)
+
+    def _show_scrollbar_demo(self):
+        win = ScrollBarWindow(title="Scroll Bar Demo")
+        win.styles.width = "60%"
+        win.styles.height = "50%"
+        cx = max(0, (self.size.width - self.size.width * 60 // 100) // 2)
+        cy = max(0, (self.size.height - self.size.height * 50 // 100) // 2)
+        win.styles.offset = (cx, cy)
+        self.insert_window(win)
+
+    def _show_listbox_demo(self):
+        win = ListBoxWindow(title="List Box Demo")
+        win.styles.width = "40%"
+        win.styles.height = "50%"
+        cx = max(0, (self.size.width - self.size.width * 40 // 100) // 2)
+        cy = max(0, (self.size.height - self.size.height * 50 // 100) // 2)
+        win.styles.offset = (cx, cy)
+        self.insert_window(win)
 
     def _close_all_windows(self):
         if self.desktop:
@@ -198,6 +384,9 @@ class ControlsDialog(Dialog):
         width: 12;
     }
     ControlsDialog .form-row > InputLine {
+        width: 1fr;
+    }
+    ControlsDialog .form-row > ComboBox {
         width: 1fr;
     }
     ControlsDialog .groups-row {
@@ -230,6 +419,17 @@ class ControlsDialog(Dialog):
         pass_input = InputLine(max_len=20, password=True)
         pass_label = Label("~P~assword", link=pass_input)
 
+        color_combo = ComboBox(items=[
+            "Black", "Blue", "Green", "Cyan",
+            "Red", "Magenta", "Brown", "Light Gray",
+        ])
+        color_label = Label("~C~olor", link=color_combo)
+
+        size_combo = ComboBox(items=[
+            "Small", "Medium", "Large", "Extra Large",
+        ], editable=False)
+        size_label = Label("~S~ize", link=size_combo)
+
         options = CheckBoxes([
             "~C~ase sensitive",
             "~W~hole words only",
@@ -246,15 +446,22 @@ class ControlsDialog(Dialog):
 
         name_row = Horizontal(name_label, name_input, classes="form-row")
         pass_row = Horizontal(pass_label, pass_input, classes="form-row")
+        color_row = Horizontal(color_label, color_combo, classes="form-row")
+        size_row = Horizontal(size_label, size_combo, classes="form-row")
+        options_label = Label("Options", link=options)
+        direction_label = Label("Direction", link=direction)
+
         groups = Horizontal(
-            Vertical(Static("Options:"), options, classes="group-box"),
-            Vertical(Static("Direction:"), direction, classes="group-box"),
+            Vertical(options_label, options, classes="group-box"),
+            Vertical(direction_label, direction, classes="group-box"),
             classes="groups-row",
         )
         buttons = Horizontal(ok_btn, cancel_btn, classes="button-row")
 
         content.mount(name_row)
         content.mount(pass_row)
+        content.mount(color_row)
+        content.mount(size_row)
         content.mount(groups)
         content.mount(buttons)
 

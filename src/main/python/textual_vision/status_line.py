@@ -68,19 +68,19 @@ class StatusLine(Widget, TVViewMixin):
         dock: bottom;
         width: 1fr;
         height: 1;
-        background: $surface;
+        background: $footer-background;
     }
     StatusLine .statusline--item {
-        color: $text;
-        background: $surface;
+        color: $footer-foreground;
+        background: $footer-background;
     }
     StatusLine .statusline--hotkey {
-        color: $menu-hotkey;
-        background: $surface;
+        color: $footer-key-foreground;
+        background: $footer-background;
     }
     StatusLine .statusline--hint {
         color: $text-muted;
-        background: $surface;
+        background: $footer-background;
     }
     """
 

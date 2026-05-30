@@ -36,6 +36,7 @@ class Background(Widget):
         width: 1fr;
         height: 1fr;
         background: $background;
+        color: $desktop-pattern-color;
     }
     """
 
@@ -82,6 +83,23 @@ class DeskTop(Group):
         self._window_layer_counter = 0
         self._z_order: list[Window] = []
 
+    @Group.current.setter  # type: ignore[attr-defined]
+    def current(self, child: Widget | None) -> None:
+        if child is not self._current:
+            if isinstance(child, Window):
+                for w in self._get_windows():
+                    if w.frame is not None:
+                        w.frame.active = (w is child)
+                if child in self._z_order:
+                    self._z_order.remove(child)
+                    self._z_order.append(child)
+                    self._rebuild_layers()
+            elif child is None:
+                for w in self._get_windows():
+                    if w.frame is not None:
+                        w.frame.active = False
+        Group.current.fset(self, child)  # type: ignore[attr-defined]
+
     def compose(self) -> ComposeResult:
         yield Background()
 
@@ -98,9 +116,6 @@ class DeskTop(Group):
         self.styles.layers = tuple(layer_names)
 
     def insert_window(self, window: Window) -> None:
-        for w in self._get_windows():
-            if w.frame is not None:
-                w.frame.active = False
         self._window_layer_counter += 1
         window.styles.layer = f"win-{self._window_layer_counter}"
         self._z_order.append(window)
@@ -176,13 +191,6 @@ class DeskTop(Group):
 
     def raise_window(self, window: Window) -> None:
         """Bring a window to the top of the Z-order and activate it."""
-        for w in self._get_windows():
-            if w.frame is not None:
-                w.frame.active = (w is window)
-        if window in self._z_order:
-            self._z_order.remove(window)
-            self._z_order.append(window)
-            self._rebuild_layers()
         self.current = window
 
 

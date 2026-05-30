@@ -20,29 +20,36 @@ import unittest
 from textual.theme import Theme
 
 from textual_vision.themes import (
-    THEME_TURBO_PASCAL, THEME_TURBO_C, ALL_THEMES,
-    CGA_BLUE, CGA_BLACK, CGA_YELLOW, CGA_WHITE, CGA_LIGHT_GRAY,
-    CGA_LIGHT_CYAN, CGA_CYAN, CGA_GREEN, CGA_RED,
+    THEME_TURBO_PASCAL, THEME_TURBO_C, THEME_TURBO_C_1X,
+    THEME_TURBO_C_TURQUOISE, ALL_THEMES,
+    CGA_BLUE, CGA_BLACK, CGA_WHITE, CGA_LIGHT_GRAY,
+    CGA_GREEN, CGA_CYAN, CGA_RED, CGA_YELLOW,
+    CGA_MAGENTA,
 )
 
 
 class ThemeDefinitionTest(unittest.TestCase):
-    def test_turbo_pascal_is_theme(self):
-        self.assertIsInstance(THEME_TURBO_PASCAL, Theme)
-
-    def test_turbo_c_is_theme(self):
-        self.assertIsInstance(THEME_TURBO_C, Theme)
+    def test_all_are_themes(self):
+        for theme in ALL_THEMES.values():
+            self.assertIsInstance(theme, Theme)
 
     def test_theme_names_distinct(self):
-        self.assertNotEqual(THEME_TURBO_PASCAL.name, THEME_TURBO_C.name)
+        names = [t.name for t in ALL_THEMES.values()]
+        self.assertEqual(len(names), len(set(names)))
 
-    def test_all_themes_contains_both(self):
+    def test_all_themes_count(self):
+        self.assertEqual(len(ALL_THEMES), 4)
+
+    def test_all_themes_contains_all(self):
         self.assertIn("turbo-pascal", ALL_THEMES)
         self.assertIn("turbo-c", ALL_THEMES)
-        self.assertEqual(len(ALL_THEMES), 2)
+        self.assertIn("turbo-c-1x", ALL_THEMES)
+        self.assertIn("turbo-c-turquoise", ALL_THEMES)
 
 
 class TurboPascalThemeTest(unittest.TestCase):
+    """TV cpAppColor palette: gray menus, blue desktop, green selection."""
+
     def test_name(self):
         self.assertEqual(THEME_TURBO_PASCAL.name, "turbo-pascal")
 
@@ -55,36 +62,43 @@ class TurboPascalThemeTest(unittest.TestCase):
     def test_gray_surface(self):
         self.assertEqual(THEME_TURBO_PASCAL.surface, CGA_LIGHT_GRAY)
 
-    def test_cyan_primary(self):
-        self.assertEqual(THEME_TURBO_PASCAL.primary, CGA_LIGHT_CYAN)
-
     def test_green_accent(self):
         self.assertEqual(THEME_TURBO_PASCAL.accent, CGA_GREEN)
 
     def test_dark_mode(self):
         self.assertTrue(THEME_TURBO_PASCAL.dark)
 
-    def test_has_scrollbar_variables(self):
-        self.assertIn("scrollbar", THEME_TURBO_PASCAL.variables)
-        self.assertIn("scrollbar-background", THEME_TURBO_PASCAL.variables)
-
-    def test_has_footer_variables(self):
-        self.assertIn("footer-foreground", THEME_TURBO_PASCAL.variables)
-        self.assertIn("footer-background", THEME_TURBO_PASCAL.variables)
-
-    def test_has_menu_hotkey_variable(self):
-        self.assertIn("menu-hotkey", THEME_TURBO_PASCAL.variables)
+    def test_text_is_black(self):
+        self.assertEqual(THEME_TURBO_PASCAL.variables["text"], CGA_BLACK)
 
     def test_menu_hotkey_is_red(self):
         self.assertEqual(THEME_TURBO_PASCAL.variables["menu-hotkey"], CGA_RED)
 
+    def test_menu_hotkey_background_matches_surface(self):
+        self.assertEqual(THEME_TURBO_PASCAL.variables["menu-hotkey-background"],
+                         CGA_LIGHT_GRAY)
+
+    def test_footer_key_foreground_is_red(self):
+        self.assertEqual(THEME_TURBO_PASCAL.variables["footer-key-foreground"],
+                         CGA_RED)
+
+    def test_window_content_background_is_blue(self):
+        self.assertEqual(THEME_TURBO_PASCAL.variables["window-content-background"],
+                         CGA_BLUE)
+
+    def test_has_scrollbar_variables(self):
+        self.assertIn("scrollbar", THEME_TURBO_PASCAL.variables)
+        self.assertIn("scrollbar-background", THEME_TURBO_PASCAL.variables)
+
 
 class TurboCThemeTest(unittest.TestCase):
+    """TC 2.01 default: same gray chrome, yellow editor, white-on-black hotkey."""
+
     def test_name(self):
         self.assertEqual(THEME_TURBO_C.name, "turbo-c")
 
-    def test_black_background(self):
-        self.assertEqual(THEME_TURBO_C.background, CGA_BLACK)
+    def test_blue_background(self):
+        self.assertEqual(THEME_TURBO_C.background, CGA_BLUE)
 
     def test_yellow_foreground(self):
         self.assertEqual(THEME_TURBO_C.foreground, CGA_YELLOW)
@@ -92,21 +106,120 @@ class TurboCThemeTest(unittest.TestCase):
     def test_gray_surface(self):
         self.assertEqual(THEME_TURBO_C.surface, CGA_LIGHT_GRAY)
 
-    def test_cyan_primary(self):
-        self.assertEqual(THEME_TURBO_C.primary, CGA_CYAN)
+    def test_text_is_black(self):
+        self.assertEqual(THEME_TURBO_C.variables["text"], CGA_BLACK)
 
-    def test_dark_mode(self):
-        self.assertTrue(THEME_TURBO_C.dark)
+    def test_menu_hotkey_is_white(self):
+        self.assertEqual(THEME_TURBO_C.variables["menu-hotkey"], CGA_WHITE)
 
-    def test_has_scrollbar_variables(self):
-        self.assertIn("scrollbar", THEME_TURBO_C.variables)
-        self.assertIn("scrollbar-background", THEME_TURBO_C.variables)
+    def test_menu_hotkey_background_is_black(self):
+        self.assertEqual(THEME_TURBO_C.variables["menu-hotkey-background"],
+                         CGA_BLACK)
 
-    def test_has_menu_hotkey_variable(self):
-        self.assertIn("menu-hotkey", THEME_TURBO_C.variables)
+    def test_footer_key_foreground_is_red(self):
+        self.assertEqual(THEME_TURBO_C.variables["footer-key-foreground"],
+                         CGA_RED)
 
-    def test_menu_hotkey_is_red(self):
-        self.assertEqual(THEME_TURBO_C.variables["menu-hotkey"], CGA_RED)
+    def test_window_content_background_is_blue(self):
+        self.assertEqual(THEME_TURBO_C.variables["window-content-background"],
+                         CGA_BLUE)
+
+
+class TurboC1xThemeTest(unittest.TestCase):
+    """TC 2.01 'Version 1.x' preset: cyan-dominant, blue-on-cyan menu."""
+
+    def test_name(self):
+        self.assertEqual(THEME_TURBO_C_1X.name, "turbo-c-1x")
+
+    def test_cyan_surface(self):
+        self.assertEqual(THEME_TURBO_C_1X.surface, CGA_CYAN)
+
+    def test_text_is_blue(self):
+        self.assertEqual(THEME_TURBO_C_1X.variables["text"], CGA_BLUE)
+
+    def test_menu_hotkey_is_yellow(self):
+        self.assertEqual(THEME_TURBO_C_1X.variables["menu-hotkey"], CGA_YELLOW)
+
+    def test_menu_hotkey_background_is_blue(self):
+        self.assertEqual(THEME_TURBO_C_1X.variables["menu-hotkey-background"],
+                         CGA_BLUE)
+
+    def test_footer_foreground_is_yellow(self):
+        self.assertEqual(THEME_TURBO_C_1X.variables["footer-foreground"],
+                         CGA_YELLOW)
+
+    def test_footer_background_is_cyan(self):
+        self.assertEqual(THEME_TURBO_C_1X.variables["footer-background"],
+                         CGA_CYAN)
+
+    def test_magenta_accent(self):
+        self.assertEqual(THEME_TURBO_C_1X.accent, CGA_MAGENTA)
+
+
+class TurboCTurquoiseThemeTest(unittest.TestCase):
+    """TC 2.01 'Turquoise' preset: black editor bg, yellow text, magenta sel."""
+
+    def test_name(self):
+        self.assertEqual(THEME_TURBO_C_TURQUOISE.name, "turbo-c-turquoise")
+
+    def test_black_background(self):
+        self.assertEqual(THEME_TURBO_C_TURQUOISE.background, CGA_BLACK)
+
+    def test_yellow_foreground(self):
+        self.assertEqual(THEME_TURBO_C_TURQUOISE.foreground, CGA_YELLOW)
+
+    def test_gray_surface(self):
+        self.assertEqual(THEME_TURBO_C_TURQUOISE.surface, CGA_LIGHT_GRAY)
+
+    def test_magenta_accent(self):
+        self.assertEqual(THEME_TURBO_C_TURQUOISE.accent, CGA_MAGENTA)
+
+    def test_window_content_background_is_black(self):
+        self.assertEqual(
+            THEME_TURBO_C_TURQUOISE.variables["window-content-background"],
+            CGA_BLACK)
+
+    def test_footer_background_is_blue(self):
+        self.assertEqual(
+            THEME_TURBO_C_TURQUOISE.variables["footer-background"],
+            CGA_BLUE)
+
+    def test_menu_hotkey_background_is_magenta(self):
+        self.assertEqual(
+            THEME_TURBO_C_TURQUOISE.variables["menu-hotkey-background"],
+            CGA_MAGENTA)
+
+
+class AllThemesHaveRequiredVariablesTest(unittest.TestCase):
+    """Every theme must define all custom variables used by widget CSS."""
+
+    REQUIRED_VARS = [
+        "text", "text-muted", "window-content-background",
+        "menu-hotkey", "menu-hotkey-background",
+        "footer-foreground", "footer-background",
+        "footer-key-foreground", "footer-key-background",
+        "desktop-pattern-color",
+        "scrollbar", "scrollbar-background",
+        "input-fg", "input-bg", "input-selected-fg", "input-selected-bg",
+        "input-arrow",
+        "button-face-fg", "button-face-bg", "button-default-fg",
+        "button-focused-fg", "button-focused-bg",
+        "button-disabled-fg", "button-disabled-bg",
+        "button-hotkey", "button-shadow-fg", "button-shadow-bg",
+        "label-highlight", "label-hotkey",
+        "cluster-fg", "cluster-bg",
+        "cluster-focused-fg", "cluster-focused-bg",
+        "cluster-hotkey", "cluster-disabled-fg", "cluster-disabled-bg",
+        "frame-icon",
+        "combo-arrow-fg", "combo-arrow-bg",
+        "combo-sides-fg", "combo-sides-bg",
+    ]
+
+    def test_all_themes_have_required_variables(self):
+        for name, theme in ALL_THEMES.items():
+            for var in self.REQUIRED_VARS:
+                self.assertIn(var, theme.variables,
+                              f"Theme '{name}' missing variable '{var}'")
 
 
 class CgaConstantsTest(unittest.TestCase):

@@ -89,6 +89,7 @@ class Command(IntEnum):
     LIST_ITEM_SELECTED = 56
     SCREEN_CHANGED = 57
     TIMER_EXPIRED = 58
+    USER = 256
 
 
 class WindowFlag(IntFlag):

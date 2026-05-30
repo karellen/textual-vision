@@ -170,17 +170,17 @@ class StatusLineHintTest(unittest.TestCase):
 
 
 class StatusLineCssTest(unittest.TestCase):
-    def test_hotkey_uses_menu_hotkey_variable(self):
-        """Status line hotkey text must use $menu-hotkey (red), not $foreground or other."""
+    def test_hotkey_uses_footer_key_foreground(self):
+        """Status line hotkey text must use $footer-key-foreground for per-theme control."""
         css = StatusLine.DEFAULT_CSS
         hotkey_section = css.split("statusline--hotkey")[1].split("}")[0]
-        self.assertIn("$menu-hotkey", hotkey_section)
+        self.assertIn("$footer-key-foreground", hotkey_section)
 
-    def test_item_uses_text_color(self):
-        """Status line normal items must use $text color."""
+    def test_item_uses_dark_text_color(self):
+        """Status line normal items must use dark (footer) foreground color."""
         css = StatusLine.DEFAULT_CSS
         item_section = css.split("statusline--item")[1].split("}")[0]
-        self.assertIn("$text", item_section)
+        self.assertIn("$footer-foreground", item_section)
 
     def test_all_component_classes_have_background(self):
         """All status line component classes must set explicit background."""
@@ -188,6 +188,12 @@ class StatusLineCssTest(unittest.TestCase):
         for cc in ("statusline--item", "statusline--hotkey", "statusline--hint"):
             section = css.split(cc)[1].split("}")[0]
             self.assertIn("background:", section, f"{cc} missing explicit background")
+
+    def test_uses_footer_background_not_surface(self):
+        """StatusLine must use $footer-background (independent from menu bar $surface)."""
+        css = StatusLine.DEFAULT_CSS
+        self.assertIn("$footer-background", css)
+        self.assertNotIn("$surface", css)
 
 
 class StatusLineTildeRenderingTest(unittest.TestCase):

@@ -26,7 +26,7 @@ from textual.reactive import reactive
 from textual.strip import Strip
 from textual.widget import Widget
 
-from textual_vision.constants import Command, OptionFlag
+from textual_vision.constants import Command, OptionFlag, StateFlag
 from textual_vision.events import CommandMessage
 from textual_vision.group import TVViewMixin
 
@@ -40,6 +40,7 @@ class InputLine(Widget, TVViewMixin):
 
     COMPONENT_CLASSES = {
         "inputline--text",
+        "inputline--focused",
         "inputline--selected",
         "inputline--cursor",
         "inputline--arrow",
@@ -51,36 +52,80 @@ class InputLine(Widget, TVViewMixin):
         width: 20;
     }
     InputLine .inputline--text {
-        color: $text;
-        background: $panel;
+        color: $input-fg;
+        background: $input-bg;
+    }
+    InputLine .inputline--focused {
+        color: $input-fg;
+        background: $input-bg;
     }
     InputLine .inputline--selected {
-        color: $text;
-        background: $accent;
+        color: $input-selected-fg;
+        background: $input-selected-bg;
     }
     InputLine .inputline--cursor {
-        color: $panel;
-        background: $foreground;
+        color: $input-bg;
+        background: $input-fg;
     }
     InputLine .inputline--arrow {
-        color: $accent;
-        background: $panel;
+        color: $input-arrow;
+        background: $input-bg;
     }
     """
 
     data: reactive[str] = reactive("")
 
     def __init__(self, max_len: int = 255, password: bool = False,
-                 **kwargs: Any) -> None:
+                 read_only: bool = False, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._max_len = max_len
         self._password = password
+        self._read_only = read_only
         self._cursor_pos = 0
         self._first_pos = 0
         self._sel_start = -1
         self._sel_end = -1
+        self._cursor_visible = True
+        self._blink_timer = None
         self.tv_options = OptionFlag.SELECTABLE
         self.can_focus = True
+
+    @property
+    def tv_focused(self) -> bool:
+        return bool(self.tv_state & StateFlag.FOCUSED)
+
+    def on_tv_focus(self) -> None:
+        self._cursor_visible = True
+        self._start_blink()
+
+    def on_tv_blur(self) -> None:
+        self._stop_blink()
+        self._cursor_visible = True
+
+    def on_mount(self) -> None:
+        if self.tv_focused:
+            self._start_blink()
+
+    def _start_blink(self) -> None:
+        self._stop_blink()
+        if not self.is_mounted:
+            return
+        self._blink_timer = self.set_interval(0.53, self._toggle_cursor, pause=False)
+
+    def _stop_blink(self) -> None:
+        if self._blink_timer is not None:
+            self._blink_timer.stop()
+            self._blink_timer = None
+
+    def _toggle_cursor(self) -> None:
+        self._cursor_visible = not self._cursor_visible
+        self.refresh()
+
+    def _reset_cursor_blink(self) -> None:
+        self._cursor_visible = True
+        if self.tv_focused:
+            self._start_blink()
+        self.refresh()
 
     @property
     def max_len(self) -> int:
@@ -89,6 +134,14 @@ class InputLine(Widget, TVViewMixin):
     @property
     def password(self) -> bool:
         return self._password
+
+    @property
+    def read_only(self) -> bool:
+        return self._read_only
+
+    @read_only.setter
+    def read_only(self, value: bool) -> None:
+        self._read_only = value
 
     @property
     def cursor_pos(self) -> int:
@@ -113,7 +166,10 @@ class InputLine(Widget, TVViewMixin):
             return Strip.blank(self.size.width)
 
         width = self.size.width
-        text_style = self.get_component_rich_style("inputline--text")
+        focused = self.tv_focused
+        text_style = self.get_component_rich_style(
+            "inputline--focused" if focused else "inputline--text"
+        )
         sel_style = self.get_component_rich_style("inputline--selected")
         cursor_style = self.get_component_rich_style("inputline--cursor")
         arrow_style = self.get_component_rich_style("inputline--arrow")
@@ -132,6 +188,8 @@ class InputLine(Widget, TVViewMixin):
         line = Text()
         line.append("◄" if has_left else " ", style=arrow_style if has_left else text_style)
 
+        show_cursor = focused and self._cursor_visible
+
         for i, ch in enumerate(visible):
             abs_pos = fp + i
             in_sel = (self.has_selection and
@@ -139,7 +197,7 @@ class InputLine(Widget, TVViewMixin):
                       max(self._sel_start, self._sel_end))
             at_cursor = (abs_pos == self._cursor_pos)
 
-            if at_cursor:
+            if at_cursor and show_cursor:
                 style = cursor_style
             elif in_sel:
                 style = sel_style
@@ -174,9 +232,11 @@ class InputLine(Widget, TVViewMixin):
             self._sel_end = -1
         self._cursor_pos = pos
         self._scroll_to_cursor()
-        self.refresh()
+        self._reset_cursor_blink()
 
     def _insert_char(self, ch: str) -> None:
+        if self._read_only:
+            return
         if self.has_selection:
             self._delete_selection()
         if len(self.data) >= self._max_len:
@@ -185,9 +245,12 @@ class InputLine(Widget, TVViewMixin):
         self.data = self.data[:pos] + ch + self.data[pos:]
         self._cursor_pos = pos + 1
         self._scroll_to_cursor()
+        self._reset_cursor_blink()
         self.post_message(InputLine.Changed(self.data))
 
     def _delete_selection(self) -> None:
+        if self._read_only:
+            return
         if not self.has_selection:
             return
         start = min(self._sel_start, self._sel_end)
@@ -200,6 +263,8 @@ class InputLine(Widget, TVViewMixin):
         self.post_message(InputLine.Changed(self.data))
 
     def _delete_char(self, forward: bool) -> None:
+        if self._read_only:
+            return
         if self.has_selection:
             self._delete_selection()
             return
@@ -275,14 +340,10 @@ class InputLine(Widget, TVViewMixin):
 
         return False
 
-    def on_key(self, event: events.Key) -> None:
-        if self.tv_handle_key(event):
-            event.stop()
-            event.prevent_default()
-
     def on_mouse_down(self, event: events.MouseDown) -> None:
         if event.button != 1:
             return
+        self.tv_select_self()
         pos = self._first_pos + event.x - 1
         pos = max(0, min(pos, len(self.data)))
         self._move_cursor(pos)

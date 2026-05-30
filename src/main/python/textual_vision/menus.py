@@ -149,7 +149,7 @@ class MenuBar(Widget, TVViewMixin):
     }
     MenuBar .menubar--hotkey {
         color: $menu-hotkey;
-        background: $surface;
+        background: $menu-hotkey-background;
     }
     MenuBar .menubar--disabled {
         color: $text-muted;
@@ -252,6 +252,7 @@ class MenuBar(Widget, TVViewMixin):
                 self._menu_box = MenuBox(menu=item.sub_menu)
                 self._menu_box.styles.offset = (x, 1)
                 self.app.screen.mount(self._menu_box)
+                self._menu_box.focus()
 
     def _item_x_offset(self, index: int) -> int:
         """Calculate the x offset of a top-level item for positioning the dropdown."""
@@ -321,9 +322,6 @@ class MenuBar(Widget, TVViewMixin):
                     self._menu_box.post_message(CommandMessage(item.command, info=item.param))
                     self._menu_box.post_message(MenuBox.ItemSelected(item))
                 return True
-            if event.key in ("up", "down", "enter", "escape", "right") or len(event.key) == 1:
-                self._menu_box.on_key(event)
-                return True
 
         if event.key == "left":
             self._navigate(-1)
@@ -359,6 +357,8 @@ class MenuBar(Widget, TVViewMixin):
 
 class MenuBox(Widget):
     """Vertical dropdown menu with borders, keyboard navigation, and sub-menu support."""
+
+    can_focus = True
 
     COMPONENT_CLASSES = {
         "menubox--border",
@@ -586,8 +586,9 @@ class MenuBox(Widget):
                 self._open_sub_menu(item)
                 event.stop()
         elif event.key == "left":
-            self._close_sub_menu()
-            event.stop()
+            if self._sub_menu_box is not None:
+                self._close_sub_menu()
+                event.stop()
         elif event.key == "escape":
             self._close_sub_menu()
             self.post_message(MenuBox.Closed())

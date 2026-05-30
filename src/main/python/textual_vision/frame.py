@@ -65,7 +65,7 @@ class Frame(Widget):
         color: $text;
     }
     Frame .frame--icon {
-        color: $accent;
+        color: $frame-icon;
     }
     Frame .frame--title {
         color: $foreground;
@@ -76,14 +76,14 @@ class Frame(Widget):
     zoomed: reactive[bool] = reactive(False)
 
     def __init__(self, title: str = "", flags: WindowFlag = WindowFlag(0),
-                 active: bool = False, **kwargs) -> None:
+                 active: bool = False,
+                 **kwargs) -> None:
         super().__init__(**kwargs)
         self._title = title
         self._flags = flags
         self._dragging = False
         self._drag_offset_x = 0
         self._drag_offset_y = 0
-        self._resizing = False
         self.active = active
 
     @property
@@ -145,7 +145,8 @@ class Frame(Widget):
                            title_style: Style) -> Strip:
         inner_width = width - 2
         if inner_width <= 0:
-            line = Text(chars["tl"] + chars["tr"], style=style)
+            line = Text()
+            line.append(chars["tl"] + chars["tr"], style=style)
             return Strip(line.render(self.app.console))
 
         buf = list(chars["h"] * inner_width)
@@ -194,13 +195,27 @@ class Frame(Widget):
         line.append(chars["tr"], style=style)
         return Strip(line.render(self.app.console))
 
+    @staticmethod
+    def bottom_border_chars(width: int, chars: dict[str, str],
+                            has_grow: bool) -> str:
+        inner_width = width - 2
+        if has_grow:
+            result = "└"
+            if inner_width >= 2:
+                result += "─" + chars["h"] * (inner_width - 2) + "─"
+            elif inner_width == 1:
+                result += "─"
+            result += "┘"
+        else:
+            result = chars["bl"] + chars["h"] * max(0, inner_width) + chars["br"]
+        return result
+
     def _render_bottom_border(self, width: int, chars: dict[str, str],
                               style: Style) -> Strip:
-        inner_width = width - 2
+        has_grow = self.active and WindowFlag.GROW in self._flags
+        text = self.bottom_border_chars(width, chars, has_grow)
         line = Text()
-        line.append(chars["bl"], style=style)
-        line.append(chars["h"] * max(0, inner_width), style=style)
-        line.append(chars["br"], style=style)
+        line.append(text, style=style)
         return Strip(line.render(self.app.console))
 
     def _render_side_borders(self, width: int, chars: dict[str, str],
@@ -224,9 +239,14 @@ class Frame(Widget):
     def _hit_title_bar(self, y: int) -> bool:
         return y == 0
 
-    def _hit_resize_corner(self, x: int, y: int) -> bool:
-        return (x >= self.size.width - 2 and y >= self.size.height - 2
-                and WindowFlag.GROW in self._flags)
+    def _hit_resize_corner(self, x: int, y: int) -> str | bool:
+        if y < self.size.height - 2 or WindowFlag.GROW not in self._flags:
+            return False
+        if x >= self.size.width - 2:
+            return "right"
+        if x < 2:
+            return "left"
+        return False
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
         if event.button != 1:
@@ -251,9 +271,9 @@ class Frame(Widget):
                 event.stop()
                 return
 
-        if self._hit_resize_corner(event.x, event.y):
-            self._resizing = True
-            self.capture_mouse()
+        corner = self._hit_resize_corner(event.x, event.y)
+        if corner:
+            self.post_message(Frame.ResizeStart(left=(corner == "left")))
             event.stop()
 
     def on_mouse_move(self, event: events.MouseMove) -> None:
@@ -263,17 +283,10 @@ class Frame(Widget):
                 delta_y=event.delta_y,
             ))
             event.stop()
-        elif self._resizing:
-            self.post_message(Frame.ResizeMove(
-                delta_x=event.delta_x,
-                delta_y=event.delta_y,
-            ))
-            event.stop()
 
     def on_mouse_up(self, event: events.MouseUp) -> None:
-        if self._dragging or self._resizing:
+        if self._dragging:
             self._dragging = False
-            self._resizing = False
             self.release_mouse()
             event.stop()
 
@@ -287,8 +300,8 @@ class Frame(Widget):
             self.delta_x = delta_x
             self.delta_y = delta_y
 
-    class ResizeMove(CommandMessage):
-        def __init__(self, delta_x: int, delta_y: int) -> None:
+    class ResizeStart(CommandMessage):
+        """Posted when a resize corner is clicked. Window handles capture."""
+        def __init__(self, left: bool = False) -> None:
             super().__init__(Command.RESIZE)
-            self.delta_x = delta_x
-            self.delta_y = delta_y
+            self.left = left

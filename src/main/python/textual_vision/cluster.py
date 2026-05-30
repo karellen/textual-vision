@@ -27,7 +27,7 @@ from textual.reactive import reactive
 from textual.strip import Strip
 from textual.widget import Widget
 
-from textual_vision.constants import Command, OptionFlag
+from textual_vision.constants import Command, OptionFlag, StateFlag
 from textual_vision.events import CommandMessage
 from textual_vision.group import TVViewMixin
 from textual_vision.menus import parse_hotkey_text, render_tilde_text
@@ -52,19 +52,23 @@ class Cluster(Widget, TVViewMixin):
     Cluster {
         height: auto;
         width: auto;
+        background: $cluster-bg;
     }
     Cluster .cluster--item {
-        color: $text;
+        color: $cluster-fg;
+        background: $cluster-bg;
     }
     Cluster .cluster--item-focused {
-        color: $text;
-        background: $accent;
+        color: $cluster-focused-fg;
+        background: $cluster-focused-bg;
     }
     Cluster .cluster--hotkey {
-        color: $menu-hotkey;
+        color: $cluster-hotkey;
+        background: $cluster-bg;
     }
     Cluster .cluster--mark {
-        color: $text;
+        color: $cluster-fg;
+        background: $cluster-bg;
     }
     """
 
@@ -127,6 +131,7 @@ class Cluster(Widget, TVViewMixin):
         if y >= self._rows:
             return Strip.blank(width)
 
+        tv_focused = bool(self.tv_state & StateFlag.FOCUSED)
         item_style = self.get_component_rich_style("cluster--item")
         focused_style = self.get_component_rich_style("cluster--item-focused")
         hotkey_style = self.get_component_rich_style("cluster--hotkey")
@@ -141,7 +146,7 @@ class Cluster(Widget, TVViewMixin):
                 line.append(" " * col_w, style=item_style)
                 continue
 
-            is_focused = (idx == self.sel)
+            is_focused = tv_focused and (idx == self.sel)
             base = focused_style if is_focused else item_style
             hk = focused_style if is_focused else hotkey_style
             mk = focused_style if is_focused else mark_style
@@ -203,14 +208,10 @@ class Cluster(Widget, TVViewMixin):
             return
         self.sel = (self.sel + delta) % n
 
-    def on_key(self, event: events.Key) -> None:
-        if self.tv_handle_key(event):
-            event.stop()
-            event.prevent_default()
-
     def on_mouse_down(self, event: events.MouseDown) -> None:
         if event.button != 1:
             return
+        self.tv_select_self()
         col_w = self._col_width()
         if col_w == 0:
             return

@@ -26,7 +26,7 @@ from textual.reactive import reactive
 from textual.strip import Strip
 from textual.widget import Widget
 
-from textual_vision.constants import Command, OptionFlag
+from textual_vision.constants import Command, OptionFlag, StateFlag
 from textual_vision.events import CommandMessage
 from textual_vision.group import TVViewMixin
 from textual_vision.menus import parse_hotkey_text, render_tilde_text
@@ -51,7 +51,9 @@ class Button(Widget, TVViewMixin):
     COMPONENT_CLASSES = {
         "button--normal",
         "button--default",
+        "button--focused",
         "button--hotkey",
+        "button--hotkey-focused",
         "button--shadow",
         "button--disabled",
     }
@@ -62,24 +64,32 @@ class Button(Widget, TVViewMixin):
         width: auto;
     }
     Button .button--normal {
-        color: $text;
-        background: $panel;
+        color: $button-face-fg;
+        background: $button-face-bg;
     }
     Button .button--default {
-        color: $text;
-        background: $panel;
+        color: $button-default-fg;
+        background: $button-face-bg;
+    }
+    Button .button--focused {
+        color: $button-focused-fg;
+        background: $button-focused-bg;
     }
     Button .button--hotkey {
-        color: $menu-hotkey;
-        background: $panel;
+        color: $button-hotkey;
+        background: $button-face-bg;
+    }
+    Button .button--hotkey-focused {
+        color: $button-hotkey;
+        background: $button-focused-bg;
     }
     Button .button--shadow {
-        color: $text-muted;
-        background: $surface;
+        color: $button-shadow-fg;
+        background: $button-shadow-bg;
     }
     Button .button--disabled {
-        color: $text-muted;
-        background: $panel;
+        color: $button-disabled-fg;
+        background: $button-disabled-bg;
     }
     """
 
@@ -133,9 +143,14 @@ class Button(Widget, TVViewMixin):
         width = self.size.width
         height = self.size.height
 
+        focused = bool(self.tv_state & StateFlag.FOCUSED)
+
         if self.disabled:
             face_style = self.get_component_rich_style("button--disabled")
             hotkey_style = face_style
+        elif focused:
+            face_style = self.get_component_rich_style("button--focused")
+            hotkey_style = self.get_component_rich_style("button--hotkey-focused")
         elif self.is_default:
             face_style = self.get_component_rich_style("button--default")
             hotkey_style = self.get_component_rich_style("button--hotkey")
@@ -195,23 +210,25 @@ class Button(Widget, TVViewMixin):
             self.post_message(CommandMessage(self._command))
             self.post_message(Button.Pressed(self._command))
 
+    def tv_get_hotkey(self) -> str | None:
+        return self._hotkey
+
+    def tv_handle_hotkey(self) -> bool:
+        if self._hotkey:
+            self.tv_select_self()
+            self.press()
+            return True
+        return False
+
     def tv_handle_key(self, event: events.Key) -> bool:
         if event.key in ("enter", "space"):
             self.press()
             return True
-        if self._hotkey and event.key.startswith("alt+") and len(event.key) == 5:
-            if event.key[4].lower() == self._hotkey:
-                self.press()
-                return True
         return False
-
-    def on_key(self, event: events.Key) -> None:
-        if self.tv_handle_key(event):
-            event.stop()
-            event.prevent_default()
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
         if event.button == 1 and not self.disabled:
+            self.tv_select_self()
             self._mouse_pressed = True
             self.down = True
             self.capture_mouse()

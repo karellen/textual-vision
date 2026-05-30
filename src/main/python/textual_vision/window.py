@@ -28,6 +28,7 @@ from textual_vision.constants import (Command, OptionFlag, WindowFlag)
 from textual_vision.events import CommandMessage
 from textual_vision.frame import Frame
 from textual_vision.group import Group
+from textual_vision.scroll_bar import ScrollBar
 
 
 class Window(Group):
@@ -41,7 +42,7 @@ class Window(Group):
     Window {
         width: 50%;
         height: 60%;
-        background: $background;
+        background: $window-content-background;
         layers: frame content;
     }
     Window > Frame {
@@ -68,6 +69,10 @@ class Window(Group):
         self._pre_zoom_offset: Offset | None = None
         self._pre_zoom_width: int | None = None
         self._pre_zoom_height: int | None = None
+        self._resizing = False
+        self._resize_left = False
+        self._resize_target_w: int | None = None
+        self._resize_target_h: int | None = None
         self.tv_options |= OptionFlag.SELECTABLE
 
     @property
@@ -150,24 +155,69 @@ class Window(Group):
             self.zoom()
 
     def close(self) -> None:
-        from textual_vision.desktop import DeskTop
         parent = self.parent
-        if isinstance(parent, DeskTop):
+        if hasattr(parent, "remove_window"):
             parent.remove_window(self)
         else:
             self.remove()
 
-    def _raise_self(self) -> None:
-        from textual_vision.desktop import DeskTop
-        parent = self.parent
-        if isinstance(parent, DeskTop):
-            parent.raise_window(self)
-
     def on_mouse_down(self, event: events.MouseDown) -> None:
-        self._raise_self()
+        self.tv_select_self()
+
+    def _apply_resize_delta(self, delta_x: int, delta_y: int) -> None:
+        if self._resize_target_w is None:
+            self._resize_target_w = self.size.width
+            self._resize_target_h = self.size.height
+        if self._resize_left:
+            new_w = max(10, self._resize_target_w - delta_x)
+            width_change = self._resize_target_w - new_w
+            self._resize_target_w = new_w
+            ox = self.styles.offset.x.value if self.styles.offset.x else 0
+            self.styles.offset = (int(ox + width_change),
+                                  int(self.styles.offset.y.value if self.styles.offset.y else 0))
+        else:
+            self._resize_target_w = max(10, self._resize_target_w + delta_x)
+        self._resize_target_h = max(5, self._resize_target_h + delta_y)
+        self.styles.width = self._resize_target_w
+        self.styles.height = self._resize_target_h
+        self.screen.refresh()
+
+    def _end_resize(self) -> None:
+        self._resize_target_w = None
+        self._resize_target_h = None
+        self._resize_left = False
+
+    def on_mouse_move(self, event: events.MouseMove) -> None:
+        if self._resizing:
+            self._apply_resize_delta(event.delta_x, event.delta_y)
+            event.stop()
+
+    def on_mouse_up(self, event: events.MouseUp) -> None:
+        if self._resizing:
+            self._resizing = False
+            self._end_resize()
+            self.release_mouse()
+            event.stop()
+
+    def _start_resize(self, left: bool = False) -> None:
+        if WindowFlag.GROW not in self._window_flags:
+            return
+        self._resizing = True
+        self._resize_left = left
+        self._resize_target_w = self.size.width
+        self._resize_target_h = self.size.height
+        self.capture_mouse()
+
+    def on_scroll_bar_corner_pressed(self, message: ScrollBar.CornerPressed) -> None:
+        self._start_resize(left=message.left)
+        message.stop()
+
+    def on_frame_resize_start(self, message: Frame.ResizeStart) -> None:
+        self._start_resize(left=message.left)
+        message.stop()
 
     def on_frame_selected(self, message: Frame.Selected) -> None:
-        self._raise_self()
+        self.tv_select_self()
         message.stop()
 
     def on_command_message(self, message: CommandMessage) -> None:
@@ -184,15 +234,5 @@ class Window(Group):
         x = (self.styles.offset.x.value if self.styles.offset.x else 0) + message.delta_x
         y = (self.styles.offset.y.value if self.styles.offset.y else 0) + message.delta_y
         self.styles.offset = (int(x), int(y))
-        self.screen.refresh()
-        message.stop()
-
-    def on_frame_resize_move(self, message: Frame.ResizeMove) -> None:
-        if WindowFlag.GROW not in self._window_flags:
-            return
-        w = self.size.width + message.delta_x
-        h = self.size.height + message.delta_y
-        self.styles.width = max(10, int(w))
-        self.styles.height = max(5, int(h))
         self.screen.refresh()
         message.stop()

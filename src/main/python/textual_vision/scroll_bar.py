@@ -22,6 +22,7 @@ from typing import Any
 from rich.text import Text
 
 from textual import events
+from textual.message import Message
 from textual.reactive import reactive
 from textual.strip import Strip
 from textual.widget import Widget
@@ -53,12 +54,12 @@ class ScrollBar(Widget, TVViewMixin):
         background: $scrollbar-background;
     }
     ScrollBar .scrollbar--track {
-        color: $scrollbar-background;
+        color: $scrollbar;
         background: $scrollbar-background;
     }
     ScrollBar .scrollbar--thumb {
-        color: $scrollbar;
-        background: $scrollbar-active;
+        color: $scrollbar-active;
+        background: $scrollbar-background;
     }
     """
 
@@ -66,16 +67,21 @@ class ScrollBar(Widget, TVViewMixin):
 
     def __init__(self, min_val: int = 0, max_val: int = 0,
                  page_step: int = 1, arrow_step: int = 1,
-                 horizontal: bool = False, **kwargs: Any) -> None:
+                 horizontal: bool = False,
+                 corner_char: str = "",
+                 left_chars: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._min_val = min_val
         self._max_val = max_val
         self._page_step = page_step
         self._arrow_step = arrow_step
         self._horizontal = horizontal
+        self._corner_char = corner_char
+        self._left_chars = left_chars
         self._dragging = False
         self._drag_start_pos = 0
         self._drag_start_value = 0
+        self._scroll_target: Any = None
         self.tv_options = OptionFlag.SELECTABLE
 
     @property
@@ -95,21 +101,35 @@ class ScrollBar(Widget, TVViewMixin):
         return self._arrow_step
 
     @property
+    def scroll_target(self) -> Any:
+        return self._scroll_target
+
+    @scroll_target.setter
+    def scroll_target(self, target: Any) -> None:
+        self._scroll_target = target
+
+    @property
     def horizontal(self) -> bool:
         return self._horizontal
 
     @property
+    def _left_len(self) -> int:
+        return len(self._left_chars)
+
+    @property
+    def _corner_len(self) -> int:
+        return len(self._corner_char)
+
+    @property
     def _track_len(self) -> int:
         total = self.size.width if self._horizontal else self.size.height
-        return max(0, total - 2)
+        return max(0, total - 2 - self._corner_len - self._left_len)
 
     @property
     def _thumb_size(self) -> int:
-        track = self._track_len
-        if track <= 0 or self._max_val <= self._min_val:
-            return track
-        range_val = self._max_val - self._min_val + self._page_step
-        return max(1, track * self._page_step // range_val)
+        if self._track_len <= 0 or self._max_val <= self._min_val:
+            return 0
+        return 1
 
     @property
     def _thumb_pos(self) -> int:
@@ -133,6 +153,8 @@ class ScrollBar(Widget, TVViewMixin):
         if clamped != self.value:
             self.value = clamped
             self.post_message(ScrollBar.Changed(clamped))
+            if self._scroll_target is not None:
+                self._scroll_target.scroll_to_value(clamped)
 
     def render_line(self, y: int) -> Strip:
         if self._horizontal:
@@ -146,20 +168,26 @@ class ScrollBar(Widget, TVViewMixin):
         track_style = self.get_component_rich_style("scrollbar--track")
         thumb_style = self.get_component_rich_style("scrollbar--thumb")
 
+        cl = self._corner_len
+        corner_start = height - cl
+        arrow_bottom = corner_start - 1 if cl else height - 1
+
         line = Text()
 
-        if y == 0:
+        if cl and y >= corner_start:
+            line.append(self._corner_char[y - corner_start], style=arrow_style)
+        elif y == 0:
             line.append("▲", style=arrow_style)
-        elif y == height - 1:
+        elif y == arrow_bottom:
             line.append("▼", style=arrow_style)
         else:
             track_pos = y - 1
             tp = self._thumb_pos
             ts = self._thumb_size
             if tp <= track_pos < tp + ts:
-                line.append("█", style=thumb_style)
+                line.append("■", style=thumb_style)
             else:
-                line.append("░", style=track_style)
+                line.append("▒", style=track_style)
 
         remaining = width - len(line.plain)
         if remaining > 0:
@@ -177,6 +205,10 @@ class ScrollBar(Widget, TVViewMixin):
         thumb_style = self.get_component_rich_style("scrollbar--thumb")
 
         line = Text()
+
+        if self._left_chars:
+            line.append(self._left_chars, style=arrow_style)
+
         line.append("◄", style=arrow_style)
 
         track = self._track_len
@@ -185,11 +217,14 @@ class ScrollBar(Widget, TVViewMixin):
 
         for i in range(track):
             if tp <= i < tp + ts:
-                line.append("█", style=thumb_style)
+                line.append("■", style=thumb_style)
             else:
-                line.append("░", style=track_style)
+                line.append("▒", style=track_style)
 
         line.append("►", style=arrow_style)
+
+        if self._corner_char:
+            line.append(self._corner_char, style=arrow_style)
 
         remaining = width - len(line.plain)
         if remaining > 0:
@@ -231,16 +266,29 @@ class ScrollBar(Widget, TVViewMixin):
     def on_mouse_down(self, event: events.MouseDown) -> None:
         if event.button != 1:
             return
+        self.tv_select_self()
 
         pos = event.x if self._horizontal else event.y
         total = self.size.width if self._horizontal else self.size.height
+        ll = self._left_len
+        cl = self._corner_len
+        arrow_start = ll
+        arrow_end = total - 1 - cl
 
-        if pos == 0:
+        if ll and pos < ll:
+            self.post_message(ScrollBar.CornerPressed(left=True))
+            event.stop()
+            return
+        elif cl and pos > arrow_end:
+            self.post_message(ScrollBar.CornerPressed())
+            event.stop()
+            return
+        elif pos == arrow_start:
             self.set_value(self.value - self._arrow_step)
-        elif pos == total - 1:
+        elif pos == arrow_end:
             self.set_value(self.value + self._arrow_step)
         else:
-            track_pos = pos - 1
+            track_pos = pos - 1 - ll
             tp = self._thumb_pos
             ts = self._thumb_size
             if tp <= track_pos < tp + ts:
@@ -260,7 +308,7 @@ class ScrollBar(Widget, TVViewMixin):
             return
 
         pos = event.x if self._horizontal else event.y
-        track_pos = pos - 1
+        track_pos = pos - 1 - self._left_len
         delta = track_pos - self._drag_start_pos
 
         movable = self._track_len - self._thumb_size
@@ -280,3 +328,9 @@ class ScrollBar(Widget, TVViewMixin):
         def __init__(self, value: int) -> None:
             super().__init__(Command.SCROLL_BAR_CHANGED)
             self.value = value
+
+    class CornerPressed(Message):
+        """Posted when a corner area of a scrollbar is clicked."""
+        def __init__(self, left: bool = False) -> None:
+            super().__init__()
+            self.left = left

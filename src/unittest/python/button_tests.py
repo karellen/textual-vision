@@ -81,20 +81,33 @@ class ButtonKeyHandlingTest(unittest.TestCase):
         result = btn.tv_handle_key(Key("space", " "))
         self.assertTrue(result)
 
-    def test_alt_hotkey_presses(self):
-        btn = Button("~O~K")
-        result = btn.tv_handle_key(Key("alt+o", None))
-        self.assertTrue(result)
-
     def test_non_matching_key_ignored(self):
         btn = Button("~O~K")
         result = btn.tv_handle_key(Key("alt+x", None))
         self.assertFalse(result)
 
-    def test_no_hotkey_alt_ignored(self):
-        btn = Button("OK")
+    def test_alt_key_not_handled_by_tv_handle_key(self):
+        btn = Button("~O~K")
         result = btn.tv_handle_key(Key("alt+o", None))
         self.assertFalse(result)
+
+
+class ButtonHotkeyTest(unittest.TestCase):
+    def test_get_hotkey_returns_letter(self):
+        btn = Button("~O~K")
+        self.assertEqual(btn.tv_get_hotkey(), "o")
+
+    def test_get_hotkey_no_tilde_returns_none(self):
+        btn = Button("OK")
+        self.assertIsNone(btn.tv_get_hotkey())
+
+    def test_handle_hotkey_with_hotkey_returns_true(self):
+        btn = Button("~O~K")
+        self.assertTrue(btn.tv_handle_hotkey())
+
+    def test_handle_hotkey_no_hotkey_returns_false(self):
+        btn = Button("OK")
+        self.assertFalse(btn.tv_handle_hotkey())
 
 
 class ButtonSizingTest(unittest.TestCase):
@@ -155,15 +168,28 @@ class ButtonCssTest(unittest.TestCase):
         self.assertIn("button--shadow", Button.COMPONENT_CLASSES)
         self.assertIn("button--disabled", Button.COMPONENT_CLASSES)
 
-    def test_normal_uses_panel_background(self):
+    def test_normal_uses_button_face_bg(self):
         css = Button.DEFAULT_CSS
         section = css.split("button--normal")[1].split("}")[0]
-        self.assertIn("$panel", section)
+        self.assertIn("$button-face-bg", section)
+        self.assertIn("$button-face-fg", section)
 
-    def test_hotkey_uses_menu_hotkey(self):
+    def test_hotkey_uses_button_hotkey(self):
         css = Button.DEFAULT_CSS
         section = css.split("button--hotkey")[1].split("}")[0]
-        self.assertIn("$menu-hotkey", section)
+        self.assertIn("$button-hotkey", section)
+
+    def test_shadow_uses_button_shadow(self):
+        css = Button.DEFAULT_CSS
+        section = css.split("button--shadow")[1].split("}")[0]
+        self.assertIn("$button-shadow-fg", section)
+        self.assertIn("$button-shadow-bg", section)
+
+    def test_focused_uses_button_focused(self):
+        css = Button.DEFAULT_CSS
+        section = css.split("button--focused")[1].split("}")[0]
+        self.assertIn("$button-focused-fg", section)
+        self.assertIn("$button-focused-bg", section)
 
 
 if __name__ == "__main__":
