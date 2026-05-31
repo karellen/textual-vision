@@ -325,10 +325,22 @@ class InputLineCssTest(unittest.TestCase):
         self.assertIn("inputline--cursor", InputLine.COMPONENT_CLASSES)
         self.assertIn("inputline--arrow", InputLine.COMPONENT_CLASSES)
 
-    def test_text_uses_panel_background(self):
+    def test_text_uses_input_bg(self):
         css = InputLine.DEFAULT_CSS
         section = css.split("inputline--text")[1].split("}")[0]
-        self.assertIn("$panel", section)
+        self.assertIn("$input-bg", section)
+        self.assertIn("$input-fg", section)
+
+    def test_focused_uses_same_input_colors(self):
+        css = InputLine.DEFAULT_CSS
+        section = css.split("inputline--focused")[1].split("}")[0]
+        self.assertIn("$input-bg", section)
+        self.assertIn("$input-fg", section)
+
+    def test_arrow_uses_input_arrow(self):
+        css = InputLine.DEFAULT_CSS
+        section = css.split("inputline--arrow")[1].split("}")[0]
+        self.assertIn("$input-arrow", section)
 
 
 if __name__ == "__main__":

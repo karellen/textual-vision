@@ -23,9 +23,10 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.screen import ModalScreen
 
-from textual_vision.constants import Command
+from textual_vision.constants import Command, OptionFlag
 from textual_vision.desktop import DeskTop
 from textual_vision.events import CommandMessage
+from textual_vision.group import TVViewMixin
 from textual_vision.menus import Menu, MenuBar
 from textual_vision.status_line import StatusDef, StatusLine
 from textual_vision.themes import register_themes
@@ -41,6 +42,8 @@ class Program(App):
     Subclasses override init_menu_bar(), init_status_line(), and
     init_desktop() to customize the application's structure.
     """
+
+    ALLOW_SELECT = False
 
     DEFAULT_CSS = """
     Program {
@@ -94,24 +97,45 @@ class Program(App):
             self._status_line = StatusLine(defs=status_defs)
             yield self._status_line
 
+    def _screen_tv_children(self) -> list[TVViewMixin]:
+        result: list[TVViewMixin] = []
+        for child in self.screen.children:
+            if isinstance(child, TVViewMixin):
+                result.append(child)
+        return result
+
     async def on_key(self, event: events.Key) -> None:
-        """Application-level three-phase dispatch.
+        """Application-level dispatch using TV option flags.
 
-        Phase 1: MenuBar (PRE_PROCESS) intercepts menu hotkeys
+        Phase 1: PRE_PROCESS children (e.g. MenuBar)
         Phase 2: Normal Textual key routing to focused widget
-        Phase 3: StatusLine (POST_PROCESS) catches unbound hotkeys
+        Phase 3: POST_PROCESS children (e.g. StatusLine)
+        Phase 4: Hotkey scan across all screen children
         """
-        if self._menu_bar is not None:
-            if self._menu_bar.tv_handle_key(event):
-                event.stop()
-                event.prevent_default()
-                return
+        tv_children = self._screen_tv_children()
 
-        if self._status_line is not None:
-            if self._status_line.tv_handle_key(event):
-                event.stop()
-                event.prevent_default()
-                return
+        for child in tv_children:
+            if OptionFlag.PRE_PROCESS in child.tv_options:
+                if child.tv_handle_key(event):
+                    event.stop()
+                    event.prevent_default()
+                    return
+
+        for child in tv_children:
+            if OptionFlag.POST_PROCESS in child.tv_options:
+                if child.tv_handle_key(event):
+                    event.stop()
+                    event.prevent_default()
+                    return
+
+        if event.key.startswith("alt+") and len(event.key) == 5:
+            letter = event.key[4].lower()
+            for child in tv_children:
+                if child.tv_get_hotkey() == letter:
+                    if child.tv_handle_hotkey():
+                        event.stop()
+                        event.prevent_default()
+                        return
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
         """Dismiss active menu when clicking outside menu widgets."""

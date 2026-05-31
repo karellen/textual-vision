@@ -151,9 +151,9 @@ class DialogCssTest(unittest.TestCase):
         self.assertIn("$surface", css)
 
     def test_dialog_overrides_window_background(self):
-        """Dialog's CSS must override Window's $background with $surface."""
+        """Dialog's CSS must override Window's $window-content-background with $surface."""
         from textual_vision.window import Window
-        self.assertIn("$background", Window.DEFAULT_CSS)
+        self.assertIn("$window-content-background", Window.DEFAULT_CSS)
         self.assertIn("$surface", Dialog.DEFAULT_CSS)
 
 

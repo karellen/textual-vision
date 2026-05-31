@@ -77,26 +77,34 @@ class LabelLinkSetterTest(unittest.TestCase):
         self.assertIsNone(lbl.link)
 
 
-class LabelKeyHandlingTest(unittest.TestCase):
-    def test_alt_hotkey_without_link_returns_false(self):
-        from textual.events import Key
-        lbl = Label("~N~ame")
-        result = lbl.tv_handle_key(Key("alt+n", None))
-        self.assertFalse(result)
-
-    def test_non_matching_key_returns_false(self):
-        from textual.events import Key
+class LabelHotkeyTest(unittest.TestCase):
+    def test_get_hotkey_with_link(self):
         target = Widget()
         lbl = Label("~N~ame", link=target)
-        result = lbl.tv_handle_key(Key("alt+x", None))
-        self.assertFalse(result)
+        self.assertEqual(lbl.tv_get_hotkey(), "n")
 
-    def test_no_hotkey_returns_false(self):
-        from textual.events import Key
+    def test_get_hotkey_without_link_returns_none(self):
+        lbl = Label("~N~ame")
+        self.assertIsNone(lbl.tv_get_hotkey())
+
+    def test_get_hotkey_no_tilde_returns_none(self):
         target = Widget()
         lbl = Label("Name", link=target)
-        result = lbl.tv_handle_key(Key("alt+n", None))
-        self.assertFalse(result)
+        self.assertIsNone(lbl.tv_get_hotkey())
+
+    def test_handle_hotkey_with_link_returns_true(self):
+        from textual_vision.group import TVViewMixin
+
+        class TVWidget(Widget, TVViewMixin):
+            pass
+
+        target = TVWidget()
+        lbl = Label("~N~ame", link=target)
+        self.assertTrue(lbl.tv_handle_hotkey())
+
+    def test_handle_hotkey_without_link_returns_false(self):
+        lbl = Label("~N~ame")
+        self.assertFalse(lbl.tv_handle_hotkey())
 
 
 class LabelNotSelectableTest(unittest.TestCase):
@@ -112,10 +120,15 @@ class LabelCssTest(unittest.TestCase):
         self.assertIn("label--hotkey", Label.COMPONENT_CLASSES)
         self.assertIn("label--disabled", Label.COMPONENT_CLASSES)
 
-    def test_hotkey_uses_menu_hotkey_variable(self):
+    def test_hotkey_uses_label_hotkey_variable(self):
         css = Label.DEFAULT_CSS
         hotkey_section = css.split("label--hotkey")[1].split("}")[0]
-        self.assertIn("$menu-hotkey", hotkey_section)
+        self.assertIn("$label-hotkey", hotkey_section)
+
+    def test_highlight_uses_label_highlight_variable(self):
+        css = Label.DEFAULT_CSS
+        section = css.split("label--highlighted")[1].split("}")[0]
+        self.assertIn("$label-highlight", section)
 
 
 if __name__ == "__main__":

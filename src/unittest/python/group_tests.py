@@ -332,6 +332,85 @@ class NestedGroupTest(unittest.TestCase):
         self.assertEqual(child.received_keys, ["e"])
 
 
+class FocusChainTest(unittest.TestCase):
+    """Tests for Group._is_focus_chain and FOCUSED propagation."""
+
+    def test_standalone_group_is_in_focus_chain(self):
+        group = Group()
+        self.assertTrue(group._is_focus_chain())
+
+    def test_group_with_focused_flag_is_in_chain(self):
+        group = Group()
+        group.tv_state |= StateFlag.FOCUSED
+        self.assertTrue(group._is_focus_chain())
+
+    def test_child_group_not_focused_is_not_in_chain(self):
+        outer = Group(name="outer")
+        inner = Group(name="inner")
+        inner.tv_options = OptionFlag.SELECTABLE
+        outer._nodes._append(inner)
+        inner._parent = outer
+        self.assertFalse(inner._is_focus_chain())
+
+    def test_child_group_with_focused_is_in_chain(self):
+        outer = Group(name="outer")
+        inner = Group(name="inner")
+        inner.tv_options = OptionFlag.SELECTABLE
+        inner.tv_state |= StateFlag.FOCUSED
+        outer._nodes._append(inner)
+        inner._parent = outer
+        self.assertTrue(inner._is_focus_chain())
+
+    def test_current_setter_sets_focused_when_in_chain(self):
+        group = Group()
+        w = MockTVWidget("w1", OptionFlag.SELECTABLE)
+        group._nodes._append(w)
+        group.current = w
+        self.assertIn(StateFlag.FOCUSED, w.tv_state)
+
+    def test_current_setter_no_focused_when_not_in_chain(self):
+        outer = Group(name="outer")
+        inner = Group(name="inner")
+        inner.tv_options = OptionFlag.SELECTABLE
+        outer._nodes._append(inner)
+        inner._parent = outer
+
+        w = MockTVWidget("w1", OptionFlag.SELECTABLE)
+        inner._nodes._append(w)
+
+        inner.current = w
+        self.assertIn(StateFlag.SELECTED, w.tv_state)
+        self.assertNotIn(StateFlag.FOCUSED, w.tv_state)
+
+    def test_on_tv_focus_propagates_to_current(self):
+        group = Group()
+        w = MockTVWidget("w1", OptionFlag.SELECTABLE)
+        group._nodes._append(w)
+        group._current = w
+        w.tv_state |= StateFlag.SELECTED
+
+        group.on_tv_focus()
+        self.assertIn(StateFlag.FOCUSED, w.tv_state)
+
+    def test_on_tv_blur_clears_from_current(self):
+        group = Group()
+        w = MockTVWidget("w1", OptionFlag.SELECTABLE)
+        group._nodes._append(w)
+        group._current = w
+        w.tv_state |= StateFlag.SELECTED | StateFlag.FOCUSED
+
+        group.on_tv_blur()
+        self.assertNotIn(StateFlag.FOCUSED, w.tv_state)
+
+    def test_on_tv_focus_noop_when_no_current(self):
+        group = Group()
+        group.on_tv_focus()
+
+    def test_on_tv_blur_noop_when_no_current(self):
+        group = Group()
+        group.on_tv_blur()
+
+
 class BroadcastMessageIsolationTest(unittest.TestCase):
     def test_broadcast_creates_separate_messages(self):
         """Each child must receive its own BroadcastMessage instance."""

@@ -373,6 +373,12 @@ class MenuBarCssTest(unittest.TestCase):
             section = css.split(cc)[1].split("}")[0]
             self.assertIn("background:", section, f"{cc} missing explicit background")
 
+    def test_hotkey_uses_menu_hotkey_background(self):
+        """Menu bar hotkey must use $menu-hotkey-background for per-theme control."""
+        css = MenuBar.DEFAULT_CSS
+        hotkey_section = css.split("menubar--hotkey")[1].split("}")[0]
+        self.assertIn("$menu-hotkey-background", hotkey_section)
+
 
 class MenuBarMouseTest(unittest.TestCase):
     def test_hit_test_item_first(self):
@@ -399,9 +405,9 @@ class MenuBarMouseTest(unittest.TestCase):
         self.assertEqual(bar._hit_test_item(0), -1)
 
 
-class MenuBarKeyForwardingTest(unittest.TestCase):
-    def test_enter_forwarded_to_menu_box_selects_item(self):
-        """When menu bar is active with an open MenuBox, Enter should be forwarded."""
+class MenuBarKeyCodeShortcutTest(unittest.TestCase):
+    def test_key_code_handled_when_box_open(self):
+        """key_code shortcuts must still be dispatched via MenuBar when box is open."""
         from textual.events import Key
         bar = MenuBar.build(
             SubMenu("~F~ile", MenuItem("~N~ew", Command.NEW)),
@@ -409,31 +415,29 @@ class MenuBarKeyForwardingTest(unittest.TestCase):
         bar.activate()
         bar._menu_box = MenuBox(
             menu=Menu(items=[
-                MenuItem("~N~ew", Command.NEW),
-                MenuItem("~O~pen", Command.OPEN),
+                MenuItem("~N~ew", Command.NEW, key_code="ctrl+n"),
+                MenuItem("~O~pen", Command.OPEN, key_code="ctrl+o"),
             ]),
         )
-        result = bar.tv_handle_key(Key("down", None))
+        result = bar.tv_handle_key(Key("ctrl+n", None))
+        self.assertTrue(result)
+        self.assertEqual(bar._menu_box.selected_index, 0)
+
+    def test_key_code_selects_matching_item(self):
+        from textual.events import Key
+        bar = MenuBar.build(
+            SubMenu("~F~ile", MenuItem("~N~ew", Command.NEW)),
+        )
+        bar.activate()
+        bar._menu_box = MenuBox(
+            menu=Menu(items=[
+                MenuItem("~N~ew", Command.NEW, key_code="ctrl+n"),
+                MenuItem("~O~pen", Command.OPEN, key_code="ctrl+o"),
+            ]),
+        )
+        result = bar.tv_handle_key(Key("ctrl+o", None))
         self.assertTrue(result)
         self.assertEqual(bar._menu_box.selected_index, 1)
-
-    def test_up_down_forwarded_to_menu_box(self):
-        from textual.events import Key
-        bar = MenuBar.build(
-            SubMenu("~F~ile", MenuItem("~N~ew", Command.NEW)),
-        )
-        bar.activate()
-        bar._menu_box = MenuBox(
-            menu=Menu(items=[
-                MenuItem("~N~ew", Command.NEW),
-                MenuItem("~O~pen", Command.OPEN),
-                MenuItem("~S~ave", Command.SAVE),
-            ]),
-        )
-        bar.tv_handle_key(Key("down", None))
-        self.assertEqual(bar._menu_box.selected_index, 1)
-        bar.tv_handle_key(Key("up", None))
-        self.assertEqual(bar._menu_box.selected_index, 0)
 
 
 class MenuBoxFindByKeyCodeTest(unittest.TestCase):
@@ -520,31 +524,20 @@ class MenuBarDismissOnUnhandledKeyTest(unittest.TestCase):
         self.assertFalse(result)
 
 
-class MenuBarKeyForwardingToMenuBoxTest(unittest.TestCase):
-    def test_keys_forwarded_when_box_open(self):
-        """When MenuBox is open, up/down/enter/escape/chars forwarded to it."""
-        from textual.events import Key
-        bar = MenuBar.build(
-            SubMenu("~F~ile", MenuItem("~N~ew", Command.NEW)),
-        )
-        bar.activate()
-        bar._menu_box = MenuBox(
-            menu=Menu(items=[
-                MenuItem("~N~ew", Command.NEW),
-                MenuItem("~O~pen", Command.OPEN),
-                MenuItem("~S~ave", Command.SAVE),
-            ]),
-        )
-        bar.tv_handle_key(Key("down", None))
-        self.assertEqual(bar._menu_box.selected_index, 1)
+class MenuBarFocusDelegationTest(unittest.TestCase):
+    def test_open_menu_box_calls_focus(self):
+        """_open_menu_box must call focus() on the MenuBox after mounting."""
+        import inspect
+        source = inspect.getsource(MenuBar._open_menu_box)
+        self.assertIn(".focus()", source)
 
-        bar.tv_handle_key(Key("down", None))
-        self.assertEqual(bar._menu_box.selected_index, 2)
+    def test_no_forwarding_block_in_tv_handle_key(self):
+        """MenuBar must not manually call MenuBox.on_key — focus-based routing handles it."""
+        import inspect
+        source = inspect.getsource(MenuBar.tv_handle_key)
+        self.assertNotIn("_menu_box.on_key", source)
 
-        bar.tv_handle_key(Key("up", None))
-        self.assertEqual(bar._menu_box.selected_index, 1)
-
-    def test_left_right_not_forwarded_without_box(self):
+    def test_left_right_navigate_without_box(self):
         """Without open MenuBox, left/right navigate the menu bar items."""
         from textual.events import Key
         bar = MenuBar.build(
@@ -555,6 +548,86 @@ class MenuBarKeyForwardingToMenuBoxTest(unittest.TestCase):
         self.assertEqual(bar.selected_index, 0)
         bar.tv_handle_key(Key("right", None))
         self.assertEqual(bar.selected_index, 1)
+
+
+class MenuBarRightArrowWithOpenBoxTest(unittest.TestCase):
+    """Right arrow in an open dropdown should navigate to the next menu bar item
+    when the current item does NOT have a submenu, and open the submenu when it does."""
+
+    def test_right_arrow_no_submenu_navigates_to_next_menu(self):
+        from textual.events import Key
+        file_menu = SubMenu("~F~ile", MenuItem("~N~ew", Command.NEW),
+                            MenuItem("~O~pen", Command.OPEN))
+        edit_menu = SubMenu("~E~dit", MenuItem("~U~ndo", Command.UNDO),
+                            MenuItem("~R~edo", Command.REDO))
+        bar = MenuBar.build(file_menu, edit_menu)
+        bar.activate()
+        self.assertEqual(bar.selected_index, 0)
+        bar._menu_box = MenuBox(
+            menu=Menu(items=[
+                MenuItem("~N~ew", Command.NEW),
+                MenuItem("~O~pen", Command.OPEN),
+            ]),
+        )
+        result = bar.tv_handle_key(Key("right", None))
+        self.assertTrue(result)
+        self.assertEqual(bar.selected_index, 1)
+
+    def test_right_arrow_with_submenu_does_not_navigate(self):
+        """Right arrow on a submenu item should NOT navigate to next menu bar item."""
+        file_menu = SubMenu("~F~ile", MenuItem("~N~ew", Command.NEW),
+                            MenuItem("~O~pen", Command.OPEN))
+        bar = MenuBar.build(file_menu, SubMenu("~E~dit", MenuItem("~U~ndo", Command.UNDO)))
+        bar.activate()
+        self.assertEqual(bar.selected_index, 0)
+        sub = Menu(items=[MenuItem("~S~ub item", Command.VALID)])
+        box = MenuBox(
+            menu=Menu(items=[
+                MenuItem("~H~as sub", Command.VALID, sub_menu=sub),
+                MenuItem("~N~o sub", Command.NEW),
+            ]),
+        )
+        box.selected_index = 0
+        bar._menu_box = box
+        item = box.select_current()
+        self.assertTrue(item.is_submenu)
+        self.assertEqual(bar.selected_index, 0)
+
+    def test_right_arrow_wraps_around_to_first_menu(self):
+        from textual.events import Key
+        bar = MenuBar.build(
+            SubMenu("~F~ile", MenuItem("~N~ew", Command.NEW)),
+            SubMenu("~E~dit", MenuItem("~U~ndo", Command.UNDO)),
+        )
+        bar.activate()
+        bar.selected_index = 1
+        bar._menu_box = MenuBox(
+            menu=Menu(items=[
+                MenuItem("~U~ndo", Command.UNDO),
+                MenuItem("~R~edo", Command.REDO),
+            ]),
+        )
+        result = bar.tv_handle_key(Key("right", None))
+        self.assertTrue(result)
+        self.assertEqual(bar.selected_index, 0)
+
+    def test_left_arrow_with_open_box_navigates_to_prev_menu(self):
+        from textual.events import Key
+        bar = MenuBar.build(
+            SubMenu("~F~ile", MenuItem("~N~ew", Command.NEW)),
+            SubMenu("~E~dit", MenuItem("~U~ndo", Command.UNDO)),
+        )
+        bar.activate()
+        bar.selected_index = 1
+        bar._menu_box = MenuBox(
+            menu=Menu(items=[
+                MenuItem("~U~ndo", Command.UNDO),
+                MenuItem("~R~edo", Command.REDO),
+            ]),
+        )
+        result = bar.tv_handle_key(Key("left", None))
+        self.assertTrue(result)
+        self.assertEqual(bar.selected_index, 0)
 
 
 class MenuBoxTest(unittest.TestCase):

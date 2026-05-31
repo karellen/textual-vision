@@ -70,6 +70,154 @@ class FrameHitTestTest(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class FrameResizeCornerHitTest(unittest.TestCase):
+    """Frame must detect both bottom-left and bottom-right resize corners."""
+
+    def _make_frame(self, width, height):
+        from unittest.mock import PropertyMock, patch
+        from textual.geometry import Size
+        frame = Frame(flags=WindowFlag.GROW)
+        patcher = patch.object(type(frame), 'size',
+                               new_callable=PropertyMock,
+                               return_value=Size(width, height))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return frame
+
+    def test_hit_bottom_right_corner(self):
+        frame = self._make_frame(20, 10)
+        result = frame._hit_resize_corner(19, 9)
+        self.assertTrue(result)
+        self.assertEqual(result, "right")
+
+    def test_hit_bottom_right_edge_cases(self):
+        frame = self._make_frame(20, 10)
+        self.assertTrue(frame._hit_resize_corner(18, 9))
+        self.assertTrue(frame._hit_resize_corner(19, 8))
+
+    def test_miss_interior(self):
+        frame = self._make_frame(20, 10)
+        self.assertFalse(frame._hit_resize_corner(10, 5))
+
+    def test_no_grow_flag_no_hit(self):
+        from unittest.mock import PropertyMock, patch
+        from textual.geometry import Size
+        frame = Frame(flags=WindowFlag.MOVE)
+        with patch.object(type(frame), 'size',
+                          new_callable=PropertyMock,
+                          return_value=Size(20, 10)):
+            self.assertFalse(frame._hit_resize_corner(19, 9))
+            self.assertFalse(frame._hit_resize_corner(0, 9))
+
+    def test_hit_bottom_left_corner(self):
+        frame = self._make_frame(20, 10)
+        result = frame._hit_resize_corner(0, 9)
+        self.assertTrue(result)
+        self.assertEqual(result, "left")
+
+    def test_hit_bottom_left_edge_cases(self):
+        frame = self._make_frame(20, 10)
+        self.assertTrue(frame._hit_resize_corner(1, 9))
+        self.assertTrue(frame._hit_resize_corner(0, 8))
+
+    def test_miss_middle_bottom(self):
+        frame = self._make_frame(20, 10)
+        self.assertFalse(frame._hit_resize_corner(10, 9))
+
+
+class FrameResizeStartMessageTest(unittest.TestCase):
+    """Frame.ResizeStart must carry a 'left' flag."""
+
+    def test_resize_start_has_left_attribute(self):
+        msg = Frame.ResizeStart()
+        self.assertTrue(hasattr(msg, "left"),
+                        "ResizeStart must have a 'left' attribute")
+
+    def test_resize_start_default_not_left(self):
+        msg = Frame.ResizeStart()
+        self.assertFalse(msg.left)
+
+    def test_resize_start_left_true(self):
+        msg = Frame.ResizeStart(left=True)
+        self.assertTrue(msg.left)
+
+
+class FrameBottomBorderTest(unittest.TestCase):
+    """Test Frame.bottom_border_chars for all grow/active combinations and widths."""
+
+    def test_active_no_grow_uses_double_line(self):
+        result = Frame.bottom_border_chars(20, FRAME_CHARS_ACTIVE, has_grow=False)
+        self.assertEqual(len(result), 20)
+        self.assertEqual(result[0], "╚")
+        self.assertEqual(result[-1], "╝")
+        self.assertTrue(all(c == "═" for c in result[1:-1]))
+
+    def test_passive_no_grow_uses_single_line(self):
+        result = Frame.bottom_border_chars(20, FRAME_CHARS_PASSIVE, has_grow=False)
+        self.assertEqual(len(result), 20)
+        self.assertEqual(result[0], "└")
+        self.assertEqual(result[-1], "┘")
+        self.assertTrue(all(c == "─" for c in result[1:-1]))
+
+    def test_active_grow_has_resize_indicators(self):
+        result = Frame.bottom_border_chars(20, FRAME_CHARS_ACTIVE, has_grow=True)
+        self.assertEqual(len(result), 20)
+        self.assertEqual(result[0], "└")
+        self.assertEqual(result[1], "─")
+        self.assertEqual(result[-2], "─")
+        self.assertEqual(result[-1], "┘")
+        self.assertTrue(all(c == "═" for c in result[2:-2]))
+
+    def test_grow_left_icon_is_single_line(self):
+        result = Frame.bottom_border_chars(20, FRAME_CHARS_ACTIVE, has_grow=True)
+        self.assertEqual(result[:2], "└─")
+
+    def test_grow_right_icon_is_single_line(self):
+        result = Frame.bottom_border_chars(20, FRAME_CHARS_ACTIVE, has_grow=True)
+        self.assertEqual(result[-2:], "─┘")
+
+    def test_grow_fill_uses_frame_h_char(self):
+        result = Frame.bottom_border_chars(20, FRAME_CHARS_ACTIVE, has_grow=True)
+        fill = result[2:-2]
+        self.assertEqual(len(fill), 16)
+        self.assertTrue(all(c == "═" for c in fill))
+
+    def test_grow_width_4_minimal_fill(self):
+        result = Frame.bottom_border_chars(4, FRAME_CHARS_ACTIVE, has_grow=True)
+        self.assertEqual(result, "└──┘")
+
+    def test_grow_width_3_single_middle(self):
+        result = Frame.bottom_border_chars(3, FRAME_CHARS_ACTIVE, has_grow=True)
+        self.assertEqual(result, "└─┘")
+
+    def test_grow_width_2_just_corners(self):
+        result = Frame.bottom_border_chars(2, FRAME_CHARS_ACTIVE, has_grow=True)
+        self.assertEqual(result, "└┘")
+
+    def test_no_grow_width_2(self):
+        result = Frame.bottom_border_chars(2, FRAME_CHARS_ACTIVE, has_grow=False)
+        self.assertEqual(result, "╚╝")
+
+    def test_no_grow_width_3(self):
+        result = Frame.bottom_border_chars(3, FRAME_CHARS_ACTIVE, has_grow=False)
+        self.assertEqual(result, "╚═╝")
+
+    def test_length_matches_width_no_grow(self):
+        for width in range(2, 50):
+            result = Frame.bottom_border_chars(width, FRAME_CHARS_ACTIVE, has_grow=False)
+            self.assertEqual(len(result), width, f"width={width}")
+
+    def test_length_matches_width_grow(self):
+        for width in range(2, 50):
+            result = Frame.bottom_border_chars(width, FRAME_CHARS_ACTIVE, has_grow=True)
+            self.assertEqual(len(result), width, f"width={width}")
+
+    def test_grow_uses_passive_fill_with_passive_chars(self):
+        result = Frame.bottom_border_chars(10, FRAME_CHARS_PASSIVE, has_grow=True)
+        fill = result[2:-2]
+        self.assertTrue(all(c == "─" for c in fill))
+
+
 class FramePropertyTest(unittest.TestCase):
     def test_title_property(self):
         frame = Frame(title="Test")
@@ -117,11 +265,27 @@ class FrameCssTest(unittest.TestCase):
         self.assertIn("$foreground", title_section)
         self.assertNotIn("$primary", title_section)
 
-    def test_icon_uses_accent_color(self):
-        """Frame icons must use $accent (green)."""
+    def test_icon_uses_frame_icon_variable(self):
         css = Frame.DEFAULT_CSS
         icon_section = css.split("frame--icon")[1].split("}")[0]
-        self.assertIn("$accent", icon_section)
+        self.assertIn("$frame-icon", icon_section)
+
+
+class FrameBottomBorderStyleTest(unittest.TestCase):
+    """Regression: bottom border segments must carry explicit style (not None)."""
+
+    def test_bottom_border_chars_not_using_text_base_style(self):
+        """Text(text, style=style) loses style in render(); must use append()."""
+        import inspect
+        source = inspect.getsource(Frame._render_bottom_border)
+        self.assertNotIn("Text(text", source)
+        self.assertIn(".append(", source)
+
+    def test_top_border_narrow_not_using_text_base_style(self):
+        """Narrow top border also must use append(), not Text(text, style)."""
+        import inspect
+        source = inspect.getsource(Frame._render_top_border)
+        self.assertNotIn("Text(chars", source)
 
 
 class WindowPropertyTest(unittest.TestCase):
@@ -174,11 +338,10 @@ class WindowUnmountedTest(unittest.TestCase):
         css = Window.DEFAULT_CSS
         self.assertIn("%", css)
 
-    def test_css_uses_background_variable_for_blue(self):
-        """Window background must be $background (blue), not $surface (gray)."""
+    def test_css_uses_window_content_background_variable(self):
+        """Window background must be $window-content-background for per-theme control."""
         css = Window.DEFAULT_CSS
-        self.assertIn("$background", css)
-        self.assertNotIn("$surface", css)
+        self.assertIn("$window-content-background", css)
 
     def test_title_setter_safe_when_unmounted(self):
         """Setting title when not mounted must not crash (no Frame to update)."""
@@ -247,14 +410,29 @@ class WindowZoomCssUnitTest(unittest.TestCase):
 
 
 class WindowResizeUnitTest(unittest.TestCase):
-    def test_resize_uses_computed_size_not_style_value(self):
-        """on_frame_resize_move must use self.size (computed cells), not styles.width.value."""
+    def test_resize_uses_tracked_targets(self):
+        """_apply_resize_delta must accumulate onto tracked targets, not re-read self.size."""
         import inspect
-        source = inspect.getsource(Window.on_frame_resize_move)
-        self.assertIn("self.size.width", source)
-        self.assertIn("self.size.height", source)
+        source = inspect.getsource(Window._apply_resize_delta)
+        self.assertIn("_resize_target_w", source)
+        self.assertIn("_resize_target_h", source)
         self.assertNotIn("styles.width.value", source)
         self.assertNotIn("styles.height.value", source)
+
+    def test_resize_target_initialized_from_size(self):
+        """_apply_resize_delta initializes targets from self.size on first call."""
+        import inspect
+        source = inspect.getsource(Window._apply_resize_delta)
+        self.assertIn("self.size.width", source)
+        self.assertIn("self.size.height", source)
+
+    def test_end_resize_clears_targets(self):
+        win = Window()
+        win._resize_target_w = 50
+        win._resize_target_h = 30
+        win._end_resize()
+        self.assertIsNone(win._resize_target_w)
+        self.assertIsNone(win._resize_target_h)
 
 
 class WindowZoomTest(unittest.TestCase):
